@@ -412,13 +412,19 @@ export default {
     // ── Controle dos inputs do código ──────────────────
     onDigitoInput(i, e) {
       const val = e.target.value.replace(/\D/g, "").slice(-1)
-      this.codigoDigitos[i] = val
+      // Vue não detecta mutação direta por índice — usa splice para forçar reatividade
+      this.codigoDigitos.splice(i, 1, val)
       this.codigoErro = false
       if (val && i < 5) {
         this.$nextTick(() => this.codigoRefs[i + 1]?.focus())
       }
-      if (this.codigoCompleto.length === 6) {
-        this.$nextTick(() => this.confirmarCodigo())
+      // Aguarda dois ticks: um para o splice propagar, outro para o computed atualizar
+      if (val && i === 5) {
+        this.$nextTick(() => {
+          this.$nextTick(() => {
+            if (this.codigoCompleto.length === 6) this.confirmarCodigo()
+          })
+        })
       }
     },
 
@@ -431,11 +437,14 @@ export default {
     onCodigoPaste(e) {
       e.preventDefault()
       const texto = (e.clipboardData || window.clipboardData).getData("text").replace(/\D/g, "").slice(0, 6)
-      texto.split("").forEach((c, i) => { this.codigoDigitos[i] = c })
+      // Usa splice em cada posição para garantir reatividade
+      texto.split("").forEach((c, i) => { this.codigoDigitos.splice(i, 1, c) })
       this.$nextTick(() => {
         const foco = Math.min(texto.length, 5)
         this.codigoRefs[foco]?.focus()
-        if (texto.length === 6) this.confirmarCodigo()
+        if (texto.length === 6) {
+          this.$nextTick(() => this.confirmarCodigo())
+        }
       })
     },
 

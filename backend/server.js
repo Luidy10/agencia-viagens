@@ -7,10 +7,8 @@ const cors = require("cors")
 const multer = require("multer")
 const path = require("path")
 const fs = require("fs")
-const { Resend } = require("resend")
+const nodemailer = require("nodemailer")
 const axios = require("axios")
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 const app = express()
 
@@ -30,6 +28,16 @@ mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/agencia_via
 const Usuario    = require("./models/User")
 const Viagem     = require("./models/Viagem")
 const Comentario = require("./models/Comentario")
+
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+})
 
 // =====================================================
 // ARMAZENAMENTO TEMPORÁRIO DE CÓDIGOS
@@ -107,8 +115,8 @@ app.post("/usuarios/enviar-codigo", async (req, res) => {
       expira: Date.now() + 10 * 60 * 1000
     })
 
-    await resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "🔐 Seu código de verificação — ViaPlan",
       html: templateEmail(
@@ -144,8 +152,8 @@ app.post("/usuarios/verificar-codigo", async (req, res) => {
     await usuario.save()
     codigosPendentes.delete(chave)
 
-    resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "✅ Cadastro confirmado — ViaPlan",
       html: `
@@ -209,8 +217,8 @@ app.post("/usuarios/recuperar-senha/enviar", async (req, res) => {
       expira: Date.now() + 10 * 60 * 1000
     })
 
-    await resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "🔑 Recuperação de senha — ViaPlan",
       html: templateEmail(
@@ -272,8 +280,8 @@ app.post("/usuarios/:id/trocar-email/enviar", async (req, res) => {
       expira: Date.now() + 10 * 60 * 1000
     })
 
-    await resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: usuario.email,
       subject: "📧 Confirmação de troca de email — ViaPlan",
       html: templateEmail(
@@ -369,7 +377,7 @@ app.delete("/usuarios/:id", async (req, res) => {
 })
 
 // =====================================================
-// LOGIN
+// ✅ LOGIN — CORRIGIDO: retorna { usuario, token }
 // =====================================================
 
 app.post("/login", async (req, res) => {
@@ -378,7 +386,10 @@ app.post("/login", async (req, res) => {
     const usuario = await Usuario.findOne({ email, senha })
     if (!usuario) return res.status(401).json({ msg: "Dados inválidos" })
 
+    // ✅ Retorna objeto com usuario e token separados
+    // O token usa o _id do usuário como identificador único
     const token = `token-${usuario._id}-${Date.now()}`
+
     res.json({ usuario, token })
   } catch (e) {
     res.status(500).json({ erro: "Erro no login" })
@@ -403,12 +414,12 @@ app.post("/viagens", async (req, res) => {
     const viagem = new Viagem({ ...req.body, precoTotal, status: "aguardando" })
     await viagem.save()
 
-    resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: viagem.email,
       subject: "⏳ Pagamento pendente",
       html: `<h2>Pagamento pendente</h2><p>Destino: <b>${viagem.destino}</b></p><p>Total: <b>R$ ${precoTotal}</b></p>`
-    }).catch(() => {})
+    })
 
     res.json({ msg: "Viagem criada", viagem })
   } catch (e) {
@@ -426,12 +437,12 @@ app.post("/viagens/pagar/:id", async (req, res) => {
     viagem.status = "pago"
     await viagem.save()
 
-    resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: viagem.email,
       subject: "✅ Pagamento confirmado",
       html: `<h2>Pagamento confirmado</h2><p>Destino: <b>${viagem.destino}</b></p>`
-    }).catch(() => {})
+    })
 
     res.json({ msg: "Pagamento confirmado", viagem })
   } catch (e) {
@@ -439,7 +450,6 @@ app.post("/viagens/pagar/:id", async (req, res) => {
     res.status(500).json({ erro: "Erro ao pagar" })
   }
 })
-
 app.put("/viagens/:id/cancelar", async (req, res) => {
   try {
     const viagem = await Viagem.findById(req.params.id)
@@ -449,8 +459,8 @@ app.put("/viagens/:id/cancelar", async (req, res) => {
     viagem.status = "cancelado"
     await viagem.save()
 
-    resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: viagem.email,
       subject: "❌ Reserva cancelada — ViaPlan",
       html: `
@@ -473,7 +483,6 @@ app.put("/viagens/:id/cancelar", async (req, res) => {
     res.status(500).json({ erro: "Erro ao cancelar viagem" })
   }
 })
-
 app.put("/viagens/:id/reagendar", async (req, res) => {
   try {
     const { dataIda, dataVolta } = req.body
@@ -487,8 +496,8 @@ app.put("/viagens/:id/reagendar", async (req, res) => {
     viagem.dataVolta = dataVolta
     await viagem.save()
 
-    resend.emails.send({
-      from: "ViaPlan <onboarding@resend.dev>",
+    await transporter.sendMail({
+      from: `"ViaPlan ✈️" <${process.env.EMAIL_USER}>`,
       to: viagem.email,
       subject: "📅 Viagem reagendada — ViaPlan",
       html: `
@@ -674,7 +683,7 @@ app.delete("/destinos/:id", verificarAdmin, async (req, res) => {
 })
 
 // =====================================================
-// CHATBOT
+// CHATBOT — Proxy para API do Google Gemini (gratuito)
 // =====================================================
 
 app.post("/chatbot", async (req, res) => {
@@ -687,6 +696,7 @@ app.post("/chatbot", async (req, res) => {
     const apiKey = process.env.GROQ_API_KEY
     console.log("🔑 Groq Key:", apiKey ? apiKey.substring(0, 12) + "..." : "❌ NÃO ENCONTRADA NO .ENV")
 
+    // Busca destinos atuais do banco
     const destinos = await Destino.find().lean()
     const destinosInfo = destinos.map(d => ({
       nome: d.nome,
@@ -701,7 +711,28 @@ app.post("/chatbot", async (req, res) => {
       avaliacao: d.avaliacao
     }))
 
-    const systemPrompt = `Você é o assistente virtual da ViaPlan, uma agência de viagens brasileira. Responda sempre em português, de forma amigável, clara e direta.\n\nDESTINOS DISPONÍVEIS ATUALMENTE:\n${JSON.stringify(destinosInfo, null, 2)}\n\nINFORMAÇÕES DA AGÊNCIA:\n- Nome: ViaPlan\n- Especialidade: Pacotes de viagem nacionais e internacionais\n- Para reservar: o usuário precisa estar logado e acessar a página de Destinos\n- Pagamento: realizado dentro da plataforma na finalização da reserva\n- Suporte: disponível via página de Contato\n\nINSTRUÇÕES:\n- Use os dados de destinos acima para responder perguntas sobre preços, locais, categorias, etc.\n- Formate valores em Reais: R$ X.XXX\n- Para reservas, direcione o usuário para a página /Destinos\n- Seja conciso: respostas entre 2-5 linhas quando possível\n- Use emojis com moderação\n- Nunca invente informações que não estão nos dados fornecidos`
+    const systemPrompt = `Você é o assistente virtual da ViaPlan, uma agência de viagens brasileira. Responda sempre em português, de forma amigável, clara e direta.
+
+DESTINOS DISPONÍVEIS ATUALMENTE:
+${JSON.stringify(destinosInfo, null, 2)}
+
+INFORMAÇÕES DA AGÊNCIA:
+- Nome: ViaPlan
+- Especialidade: Pacotes de viagem nacionais e internacionais
+- Páginas disponíveis: Home, Destinos, Turismo, Comentários, Sobre Nós, Central de Ajuda, Contato, Política de Privacidade, Termos de Uso
+- Para reservar: o usuário precisa estar logado e acessar a página de Destinos
+- Pagamento: realizado dentro da plataforma na finalização da reserva
+- Suporte: disponível via página de Contato
+
+INSTRUÇÕES:
+- Use os dados de destinos acima para responder perguntas sobre preços, locais, categorias, etc.
+- Quando o usuário perguntar sobre preços, filtre os destinos corretamente e liste os resultados
+- Formate valores em Reais: R$ X.XXX
+- Se não houver destinos que atendam ao critério, diga isso claramente
+- Para reservas, direcione o usuário para a página /Destinos
+- Seja conciso: respostas entre 2-5 linhas quando possível
+- Use emojis com moderação para deixar a conversa mais leve
+- Nunca invente informações que não estão nos dados fornecidos`
 
     const response = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",

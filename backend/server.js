@@ -24,7 +24,7 @@ require("dotenv").config()
   const app = express()
 
   const allowedOrigins = [
-    'https://agencia-viagens-2g7y.vercel.app',
+    "https://agencia-viagens-2g7y.vercel.app",
     "http://localhost:5173",
     "http://localhost:4173"
   ]
